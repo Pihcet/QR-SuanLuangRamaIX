@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Vault - ระบบสร้างและจัดเก็บ QR Code ส่วนตัว</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRious QR Code Generator Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Identity Services (for optional Google Drive backup) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+                            400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af'
+                        },
+                        ink: {
+                            50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1',
+                            400: '#94a3b8', 500: '#64748b', 600: '#475569', 700: '#334155', 800: '#1e293b', 900: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Prompt', 'Inter', sans-serif; }
+        .font-mono-url { font-family: '"JetBrains Mono"', 'Prompt', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .card-panel { background: #ffffff; border: 1px solid #e2e8f0; }
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; background: white !important; color: black !important; }
+        }
+        .safe-edge-safe { border-left-color: #10b981; }
+        .safe-edge-caution { border-left-color: #f59e0b; }
+        .safe-edge-danger { border-left-color: #ef4444; }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-ink-50 text-ink-900 overflow-x-hidden selection:bg-brand-200">
+
+    <!-- Header / Navigation Bar -->
+    <header class="sticky top-0 z-30 border-b border-ink-200 bg-white/90 backdrop-blur-md px-4 lg:px-8 py-3.5 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center shadow-md shadow-brand-500/20">
+                <i class="fa-solid fa-qrcode text-xl text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight text-ink-900">QR Vault</h1>
+                <p class="text-xs text-ink-500 font-light">เครื่องมือสร้างและจัดเก็บ QR Code ส่วนตัว</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-2.5">
+            <!-- Drive Sync Status Badge -->
+            <button onclick="openModal('drive-modal')" id="sync-status" class="flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs bg-ink-100 text-ink-600 border border-ink-200 hover:bg-ink-200 transition">
+                <span id="sync-dot" class="w-2 h-2 rounded-full bg-ink-400"></span>
+                <span id="sync-text">ยังไม่ได้เชื่อมต่อ Google Drive</span>
+            </button>
+
+            <button onclick="openPrintModal()" class="px-3.5 py-1.5 rounded-lg bg-white hover:bg-ink-100 text-ink-700 text-xs font-medium border border-ink-200 transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-print"></i>
+                <span class="hidden sm:inline">พิมพ์ / ส่งออก</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Safety Tip Banner -->
+    <div id="safety-banner" class="max-w-7xl w-full mx-auto px-4 md:px-6 lg:px-8 pt-4">
+        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start space-x-3">
+            <i class="fa-solid fa-shield-halved text-amber-500 mt-0.5"></i>
+            <p class="text-xs text-amber-800 leading-relaxed flex-1">
+                <span class="font-semibold">เพื่อความปลอดภัยของผู้ที่สแกน:</span>
+                ระบบจะแสดง URL ปลายทางเป็นตัวอักษรใต้ QR Code ทุกครั้ง ให้ผู้สแกนตรวจสอบลิงก์ก่อนเปิดเสมอ และไม่ควรกรอกรหัสผ่านหรือข้อมูลบัตรหลังสแกน หากไม่แน่ใจในที่มา
+            </p>
+            <button onclick="document.getElementById('safety-banner').remove()" class="text-amber-400 hover:text-amber-600 p-1">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+
+        <!-- LEFT COLUMN: QR Code Generator & Designer -->
+        <section class="lg:col-span-5 flex flex-col space-y-6">
+            <div class="card-panel rounded-2xl p-5 md:p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 id="form-heading" class="text-base font-semibold text-ink-900 flex items-center space-x-2">
+                        <i class="fa-solid fa-wand-magic-sparkles text-brand-600"></i>
+                        <span>สร้าง QR Code ใหม่</span>
+                    </h2>
+                    <span class="text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 font-medium">สดใหม่</span>
+                </div>
+
+                <form id="qr-form" onsubmit="handleSaveQR(event)" class="space-y-4">
+                    <input type="hidden" id="qr-edit-id" value="">
+
+                    <!-- Name Input -->
+                    <div>
+                        <label for="qr-title" class="block text-xs font-medium text-ink-600 mb-1.5">
+                            ชื่อ QR Code <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-400">
+                                <i class="fa-solid fa-tag text-xs"></i>
+                            </span>
+                            <input type="text" id="qr-title" required placeholder="ตัวอย่าง: เว็บไซต์ร้านค้า, เมนูอาหาร, พอร์ตโฟลิโอ"
+                                class="w-full pl-9 pr-3 py-2.5 bg-white border border-ink-300 rounded-xl text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                        </div>
+                    </div>
+
+                    <!-- URL / Website Input -->
+                    <div>
+                        <label for="qr-url" class="block text-xs font-medium text-ink-600 mb-1.5">
+                            URL / ลิงก์เว็บไซต์ <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-400">
+                                <i class="fa-solid fa-link text-xs"></i>
+                            </span>
+                            <input type="text" id="qr-url" required placeholder="https://www.example.com" value="https://example.com"
+                                oninput="updateLivePreview()"
+                                class="w-full pl-9 pr-3 py-2.5 bg-white border border-ink-300 rounded-xl text-sm font-mono-url text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                        </div>
+                        <!-- Live safety readout -->
+                        <div id="url-safety-readout" class="mt-1.5 text-[11px] flex items-center space-x-1.5 text-ink-500">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>กรอกลิงก์เพื่อตรวจสอบความปลอดภัยเบื้องต้น</span>
+                        </div>
+                    </div>
+
+                    <!-- Category Selector -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label for="qr-category" class="block text-xs font-medium text-ink-600">หมวดหมู่</label>
+                            <button type="button" onclick="openCategoryModal()" class="text-[11px] text-brand-600 hover:text-brand-700 font-medium flex items-center space-x-1">
+                                <i class="fa-solid fa-gear text-[10px]"></i>
+                                <span>จัดการหมวดหมู่</span>
+                            </button>
+                        </div>
+                        <div class="relative">
+                            <select id="qr-category" class="w-full px-3 py-2.5 bg-white border border-ink-300 rounded-xl text-sm text-ink-800 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 appearance-none transition">
+                                <!-- Options populated dynamically -->
+                            </select>
+                            <span class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-ink-400 text-xs">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Design & Color Customization (Collapsible) -->
+                    <div class="border border-ink-200 rounded-xl p-3.5 bg-ink-50 space-y-3">
+                        <div class="flex items-center justify-between cursor-pointer" onclick="toggleCustomizer()">
+                            <span class="text-xs font-medium text-ink-600 flex items-center space-x-2">
+                                <i class="fa-solid fa-palette text-brand-500"></i>
+                                <span>ปรับแต่งสีและโลโก้</span>
+                            </span>
+                            <i id="customizer-chevron" class="fa-solid fa-chevron-down text-xs text-ink-400 transition-transform"></i>
+                        </div>
+
+                        <div id="customizer-panel" class="space-y-3 pt-2 hidden">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-medium text-ink-500 mb-1">สีเส้นลาย QR</label>
+                                    <div class="flex items-center space-x-2 bg-white border border-ink-300 rounded-lg p-1.5">
+                                        <input type="color" id="qr-fg-color" value="#0f172a" oninput="updateLivePreview()" class="w-7 h-7 rounded cursor-pointer border-0 bg-transparent">
+                                        <span id="fg-hex" class="text-xs font-mono-url text-ink-600">#0f172a</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-medium text-ink-500 mb-1">สีพื้นหลัง</label>
+                                    <div class="flex items-center space-x-2 bg-white border border-ink-300 rounded-lg p-1.5">
+                                        <input type="color" id="qr-bg-color" value="#ffffff" oninput="updateLivePreview()" class="w-7 h-7 rounded cursor-pointer border-0 bg-transparent">
+                                        <span id="bg-hex" class="text-xs font-mono-url text-ink-600">#ffffff</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[11px] font-medium text-ink-500 mb-1">ชุดสีสำเร็จรูป</label>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button type="button" onclick="setPresetTheme('#000000', '#ffffff')" class="px-2 py-1 bg-white hover:bg-ink-100 rounded text-[11px] text-ink-600 border border-ink-200">ขาว-ดำคลาสสิก</button>
+                                    <button type="button" onclick="setPresetTheme('#1e3a8a', '#eff6ff')" class="px-2 py-1 bg-white hover:bg-ink-100 rounded text-[11px] text-blue-700 border border-ink-200">น้ำเงินพรีเมียม</button>
+                                    <button type="button" onclick="setPresetTheme('#065f46', '#ecfdf5')" class="px-2 py-1 bg-white hover:bg-ink-100 rounded text-[11px] text-emerald-700 border border-ink-200">เขียวมรกต</button>
+                                    <button type="button" onclick="setPresetTheme('#831843', '#fdf2f8')" class="px-2 py-1 bg-white hover:bg-ink-100 rounded text-[11px] text-pink-700 border border-ink-200">ชมพูเบอร์กันดี</button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[11px] font-medium text-ink-500 mb-1">ไอคอน / โลโก้ตรงกลาง (เลือกจากคลัง หรืออัปโหลด PNG)</label>
+                                <div class="grid grid-cols-6 gap-1.5" id="icon-presets">
+                                    <button type="button" data-icon="" onclick="selectCenterIcon('')" class="icon-btn active p-2 rounded-lg bg-white border border-brand-500 text-xs text-ink-600 text-center hover:bg-ink-100">ไม่มี</button>
+                                    <button type="button" data-icon="globe" onclick="selectCenterIcon('globe')" class="icon-btn p-2 rounded-lg bg-white border border-ink-200 text-xs text-ink-600 text-center hover:bg-ink-100"><i class="fa-solid fa-globe"></i></button>
+                                    <button type="button" data-icon="link" onclick="selectCenterIcon('link')" class="icon-btn p-2 rounded-lg bg-white border border-ink-200 text-xs text-ink-600 text-center hover:bg-ink-100"><i class="fa-solid fa-link"></i></button>
+                                    <button type="button" data-icon="share" onclick="selectCenterIcon('share')" class="icon-btn p-2 rounded-lg bg-white border border-ink-200 text-xs text-ink-600 text-center hover:bg-ink-100"><i class="fa-solid fa-share-nodes"></i></button>
+                                    <button type="button" data-icon="star" onclick="selectCenterIcon('star')" class="icon-btn p-2 rounded-lg bg-white border border-ink-200 text-xs text-ink-600 text-center hover:bg-ink-100"><i class="fa-solid fa-star"></i></button>
+                                    <button type="button" data-icon="custom" onclick="triggerCustomIconUpload()" class="icon-btn p-2 rounded-lg bg-white border border-ink-200 text-xs text-brand-600 text-center hover:bg-ink-100 relative" title="อัปโหลดรูป PNG ส่วนตัว">
+                                        <i class="fa-solid fa-file-arrow-up"></i>
+                                    </button>
+                                </div>
+                                <input type="file" id="custom-icon-file" accept="image/png, image/jpeg, image/webp" class="hidden" onchange="handleCustomIconUpload(event)">
+
+                                <div id="custom-icon-preview-box" class="hidden mt-2 p-2 bg-white border border-ink-200 rounded-xl flex items-center justify-between">
+                                    <div class="flex items-center space-x-2">
+                                        <img id="custom-icon-img-preview" src="" class="w-6 h-6 object-contain rounded bg-white p-0.5 border border-ink-200" alt="Uploaded Logo">
+                                        <span class="text-[11px] text-ink-600 font-medium truncate max-w-[140px]" id="custom-icon-filename">โลโก้ PNG ของคุณ</span>
+                                    </div>
+                                    <button type="button" onclick="removeCustomIcon()" class="text-xs text-rose-500 hover:text-rose-600 p-1" title="ลบโลโก้นี้">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Preview Display -->
+                    <div class="mt-4 p-4 rounded-2xl bg-ink-50 border border-ink-200 flex flex-col items-center justify-center space-y-3">
+                        <div class="p-3 bg-white rounded-2xl shadow-md border border-ink-100 transition-transform duration-300 transform hover:scale-105" id="preview-container">
+                            <canvas id="qr-preview" class="max-w-full h-auto rounded-lg"></canvas>
+                        </div>
+                        <p class="text-[11px] text-ink-500 text-center font-light flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-eye text-brand-500"></i>
+                            <span>ตัวอย่างจริง (แสดงผลทันที)</span>
+                        </p>
+                    </div>
+
+                    <!-- Form Action Buttons -->
+                    <div class="grid grid-cols-2 gap-3 pt-2">
+                        <button type="button" onclick="downloadPreviewPNG()" class="px-4 py-2.5 rounded-xl bg-white hover:bg-ink-100 border border-ink-300 text-ink-700 text-xs font-medium transition flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-download"></i>
+                            <span>โหลดรูป PNG</span>
+                        </button>
+                        <button type="submit" id="qr-submit-btn" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-md shadow-brand-500/25 transition flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-bookmark"></i>
+                            <span>ตั้งชื่อ &amp; บันทึกเข้าคลัง</span>
+                        </button>
+                    </div>
+                    <button type="button" id="qr-cancel-edit-btn" onclick="cancelEdit()" class="hidden w-full px-4 py-2 rounded-xl bg-white border border-ink-300 text-ink-500 text-xs font-medium hover:bg-ink-100 transition">
+                        ยกเลิกการแก้ไข
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Saved QR Codes Library / Vault -->
+        <section class="lg:col-span-7 flex flex-col space-y-5">
+            <!-- Vault Controls Bar -->
+            <div class="card-panel rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between shadow-sm">
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-400">
+                        <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                    </span>
+                    <input type="text" id="search-input" oninput="filterVault()" placeholder="ค้นหาตามชื่อ หรือ URL..."
+                        class="w-full pl-9 pr-8 py-2 bg-white border border-ink-300 rounded-xl text-xs text-ink-800 placeholder-ink-400 focus:outline-none focus:border-brand-500 transition">
+                    <button type="button" id="clear-search" onclick="clearSearch()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-ink-400 hover:text-ink-700">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                </div>
+
+                <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0" id="category-filters">
+                    <!-- Dynamic Category Filters Rendered Here -->
+                </div>
+            </div>
+
+            <!-- Vault Header Stats & Count -->
+            <div class="flex items-center justify-between px-1">
+                <div class="flex items-center space-x-2">
+                    <h3 class="text-sm font-semibold text-ink-700">คลัง QR Code ที่บันทึกไว้</h3>
+                    <span id="saved-count-badge" class="px-2 py-0.5 rounded-full bg-ink-100 text-ink-600 text-xs font-medium border border-ink-200">0 รายการ</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-ink-400">เรียงตาม:</span>
+                    <select id="sort-select" onchange="filterVault()" class="bg-white border border-ink-300 text-ink-600 text-xs rounded-lg px-2 py-1 focus:outline-none">
+                        <option value="newest">ล่าสุดก่อน</option>
+                        <option value="oldest">เก่าสุดก่อน</option>
+                        <option value="name">ตามชื่อ (A-Z)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Vault Cards Container -->
+            <div id="vault-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Saved items rendered dynamically -->
+            </div>
+
+            <!-- Empty State Display -->
+            <div id="empty-state" class="card-panel rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-4 shadow-sm">
+                <div class="w-16 h-16 rounded-full bg-ink-100 border border-ink-200 flex items-center justify-center text-ink-400 text-2xl">
+                    <i class="fa-solid fa-folder-open"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-ink-600">ยังไม่มี QR Code ในคลังของคุณ</p>
+                    <p class="text-xs text-ink-400 mt-1">กรอกข้อมูลและตั้งชื่อทางด้านซ้ายเพื่อบันทึก QR Code ตัวแรก</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal: View & Quick Actions for Saved Item -->
+    <div id="view-modal" class="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative border border-ink-200 transform transition-all scale-95 opacity-0 modal-anim">
+            <button onclick="closeModal('view-modal')" class="absolute top-4 right-4 text-ink-400 hover:text-ink-700 p-1 rounded-lg hover:bg-ink-100 transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="text-center space-y-4">
+                <div class="inline-block px-3 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-medium" id="modal-category">
+                    ทั่วไป
+                </div>
+                <h3 class="text-lg font-bold text-ink-900" id="modal-title">ชื่อ QR Code</h3>
+
+                <div class="p-4 bg-white rounded-2xl shadow-md border border-ink-100 inline-block my-2">
+                    <canvas id="modal-qr-canvas" class="max-w-full h-auto rounded-lg"></canvas>
+                </div>
+
+                <div id="modal-safety-badge" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium"></div>
+
+                <div class="bg-ink-50 border border-ink-200 rounded-xl p-3 text-left space-y-1">
+                    <p class="text-[11px] text-ink-500 font-medium">ปลายทาง URL (ตรวจสอบก่อนเปิดเสมอ)</p>
+                    <p class="text-xs font-mono-url text-brand-700 break-all" id="modal-url">https://example.com</p>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 pt-2">
+                    <button onclick="editFromModal()" class="py-2.5 px-3 rounded-xl bg-white hover:bg-ink-100 border border-ink-300 text-ink-700 text-xs font-medium transition flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-pen"></i>
+                        <span>แก้ไข</span>
+                    </button>
+                    <button onclick="downloadModalQR()" class="py-2.5 px-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium transition flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-download"></i>
+                        <span>PNG</span>
+                    </button>
+                    <button onclick="copyModalLink()" class="py-2.5 px-3 rounded-xl bg-white hover:bg-ink-100 border border-ink-300 text-ink-700 text-xs font-medium transition flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-copy"></i>
+                        <span>ลิงก์</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Confirmation Dialog -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl relative border border-ink-200 text-center space-y-4">
+            <div class="w-12 h-12 rounded-full bg-rose-50 border border-rose-200 text-rose-500 flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-ink-900">ยืนยันการลบ QR Code</h3>
+                <p class="text-xs text-ink-500 mt-1" id="confirm-delete-name">คุณต้องการลบรายการนี้ใช่หรือไม่?</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="closeModal('confirm-modal')" class="py-2 rounded-xl bg-white hover:bg-ink-100 text-ink-600 text-xs font-medium border border-ink-300">ยกเลิก</button>
+                <button id="btn-confirm-delete" class="py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium shadow-md shadow-rose-600/20">ลบรายการ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Category Manager -->
+    <div id="category-modal" class="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative border border-ink-200 space-y-4 modal-anim transform transition-all scale-95 opacity-0">
+            <button onclick="closeModal('category-modal')" class="absolute top-4 right-4 text-ink-400 hover:text-ink-700 p-1 rounded-lg hover:bg-ink-100 transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-tags text-brand-500 text-lg"></i>
+                <h3 class="text-base font-bold text-ink-900">จัดการหมวดหมู่ส่วนตัว</h3>
+            </div>
+
+            <form onsubmit="handleAddCategory(event)" class="flex space-x-2">
+                <input type="text" id="new-cat-input" required placeholder="ชื่อหมวดหมู่ใหม่..."
+                    class="flex-1 px-3 py-2 bg-white border border-ink-300 rounded-xl text-xs text-ink-800 focus:outline-none focus:border-brand-500">
+                <button type="submit" class="px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1">
+                    <i class="fa-solid fa-plus text-xs"></i>
+                    <span>เพิ่ม</span>
+                </button>
+            </form>
+
+            <div class="border-t border-ink-200 pt-3">
+                <p class="text-xs text-ink-500 font-medium mb-2">รายการหมวดหมู่ทั้งหมด</p>
+                <div id="category-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Print / Export Sheet -->
+    <div id="print-modal" class="fixed inset-0 z-50 bg-ink-900/70 backdrop-blur-md hidden flex flex-col p-4 md:p-8 overflow-y-auto">
+        <div class="max-w-4xl w-full mx-auto bg-white rounded-2xl p-6 shadow-2xl border border-ink-200 space-y-6">
+            <div class="flex items-center justify-between border-b border-ink-200 pb-4">
+                <div>
+                    <h3 class="text-base font-bold text-ink-900">เตรียมพิมพ์ / ส่งออก QR Code</h3>
+                    <p class="text-xs text-ink-500">แสดงผลในรูปแบบการ์ดสำหรับพิมพ์ใส่กระดาษ หรือ Sticker</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium shadow-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-print"></i>
+                        <span>สั่งพิมพ์ (Print)</span>
+                    </button>
+                    <button onclick="closeModal('print-modal')" class="p-2 rounded-xl bg-ink-100 hover:bg-ink-200 text-ink-600">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="print-area" class="grid grid-cols-2 sm:grid-cols-3 gap-6 p-6 bg-white text-ink-900 rounded-xl">
+                <!-- Dynamic print cards rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Google Drive Backup Settings -->
+    <div id="drive-modal" class="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative border border-ink-200 space-y-5 modal-anim transform transition-all scale-95 opacity-0 max-h-[90vh] overflow-y-auto">
+            <button onclick="closeModal('drive-modal')" class="absolute top-4 right-4 text-ink-400 hover:text-ink-700 p-1 rounded-lg hover:bg-ink-100 transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="flex items-center space-x-2">
+                <i class="fa-brands fa-google-drive text-brand-500 text-lg"></i>
+                <h3 class="text-base font-bold text-ink-900">สำรองข้อมูลขึ้น Google Drive ของคุณ</h3>
+            </div>
+
+            <p class="text-xs text-ink-500 leading-relaxed">
+                เชื่อมต่อบัญชี Google ของคุณเพื่อสำรอง QR Code ทั้งหมดไว้เป็นไฟล์ในไดรฟ์ส่วนตัวของคุณเอง
+                แอปนี้ขอสิทธิ์แบบจำกัด (<span class="font-mono-url">drive.file</span>) จึงเข้าถึงได้เฉพาะไฟล์สำรองที่แอปสร้างขึ้นเท่านั้น ไม่สามารถเห็นไฟล์อื่นในไดรฟ์ของคุณ
+            </p>
+
+            <div class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800 leading-relaxed">
+                <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                การเชื่อมต่อ Google ต้องเปิดหน้านี้ผ่านที่อยู่เว็บ (http:// หรือ https://) เช่น อัปโหลดขึ้น GitHub Pages หรือรันเซิร์ฟเวอร์ในเครื่อง — หากเปิดไฟล์ตรงๆ (file://) จะเชื่อมต่อ Google ไม่ได้ หากยังไม่พร้อม ใช้ปุ่ม "ส่งออกเป็นไฟล์ JSON" ด้านล่างแทนได้ทันที
+            </div>
+
+            <div class="space-y-2">
+                <label for="drive-client-id" class="block text-xs font-medium text-ink-600">Google OAuth Client ID ของคุณ</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="drive-client-id" placeholder="xxxxxxxxxx.apps.googleusercontent.com"
+                        class="flex-1 px-3 py-2 bg-white border border-ink-300 rounded-xl text-xs font-mono-url text-ink-800 focus:outline-none focus:border-brand-500">
+                    <button onclick="saveDriveClientId()" class="px-3 py-2 bg-ink-800 hover:bg-ink-900 text-white text-xs font-medium rounded-xl">บันทึก</button>
+                </div>
+                <p class="text-[11px] text-ink-400">
+                    ยังไม่มี Client ID? สร้างได้ฟรีที่
+                    <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="text-brand-600 underline">Google Cloud Console → Credentials</a>
+                    (สร้าง OAuth Client ID ประเภท "Web application" แล้วเพิ่มที่อยู่เว็บของคุณใน Authorized JavaScript origins)
+                </p>
+            </div>
+
+            <div class="flex items-center justify-between rounded-xl border border-ink-200 bg-ink-50 px-3 py-2.5">
+                <div class="flex items-center space-x-2">
+                    <span id="drive-status-dot" class="w-2.5 h-2.5 rounded-full bg-ink-400"></span>
+                    <span id="drive-status-text" class="text-xs font-medium text-ink-600">ยังไม่ได้เชื่อมต่อ</span>
+                </div>
+                <div id="drive-connect-actions" class="flex items-center space-x-2">
+                    <button onclick="connectDrive()" id="drive-connect-btn" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg">เชื่อมต่อ</button>
+                    <button onclick="disconnectDrive()" id="drive-disconnect-btn" class="hidden px-3 py-1.5 bg-white border border-ink-300 hover:bg-ink-100 text-ink-600 text-xs font-medium rounded-lg">ยกเลิกการเชื่อมต่อ</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="driveBackupNow()" id="drive-backup-btn" disabled class="py-2.5 rounded-xl bg-ink-100 text-ink-400 text-xs font-medium border border-ink-200 flex items-center justify-center space-x-1.5 disabled:cursor-not-allowed">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>สำรองข้อมูลตอนนี้</span>
+                </button>
+                <button onclick="driveRestoreNow()" id="drive-restore-btn" disabled class="py-2.5 rounded-xl bg-ink-100 text-ink-400 text-xs font-medium border border-ink-200 flex items-center justify-center space-x-1.5 disabled:cursor-not-allowed">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <span>กู้คืนจาก Drive</span>
+                </button>
+            </div>
+            <p id="drive-last-sync" class="text-[11px] text-ink-400 text-center"></p>
+
+            <div class="border-t border-ink-200 pt-4 space-y-2">
+                <p class="text-xs font-medium text-ink-600">สำรองข้อมูลแบบไม่ต้องตั้งค่า (ไฟล์ JSON)</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="exportJsonFile()" class="py-2.5 rounded-xl bg-white hover:bg-ink-100 border border-ink-300 text-ink-700 text-xs font-medium flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-file-export"></i>
+                        <span>ส่งออกเป็นไฟล์ JSON</span>
+                    </button>
+                    <button onclick="document.getElementById('import-json-file').click()" class="py-2.5 rounded-xl bg-white hover:bg-ink-100 border border-ink-300 text-ink-700 text-xs font-medium flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-file-import"></i>
+                        <span>นำเข้าไฟล์ JSON</span>
+                    </button>
+                </div>
+                <input type="file" id="import-json-file" accept="application/json" class="hidden" onchange="importJsonFile(event)">
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+    <!-- Application Logic -->
+    <script>
+        // ---------- Application State ----------
+        let vaultItems = [];
+        let categories = ['ทั่วไป', 'โซเชียล', 'ธุรกิจ', 'ร้านค้า', 'ส่วนตัว'];
+        let currentFilterCategory = 'ทั้งหมด';
+        let currentCenterIcon = '';
+        let customIconDataUrl = null;
+        let selectedItemForDelete = null;
+        let selectedItemForView = null;
+
+        const STORAGE_KEY_ITEMS = 'qrVault.items';
+        const STORAGE_KEY_CATS = 'qrVault.categories';
+
+        // ---------- Local Persistence ----------
+        function saveLocalState() {
+            try {
+                localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(vaultItems));
+            } catch (e) {
+                console.error('Local save error:', e);
+                showToast('บันทึกข้อมูลในเครื่องไม่สำเร็จ (พื้นที่จัดเก็บอาจเต็ม)', 'error');
+            }
+            if (driveState.connected) {
+                driveAutoSync();
+            }
+        }
+
+        function loadLocalState() {
+            try {
+                const rawItems = localStorage.getItem(STORAGE_KEY_ITEMS);
+                vaultItems = rawItems ? JSON.parse(rawItems) : [];
+            } catch (e) {
+                vaultItems = [];
+            }
+        }
+
+        function saveCategories() {
+            try {
+                localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(categories));
+            } catch (e) {
+                console.error('Category save error:', e);
+            }
+            if (driveState.connected) {
+                driveAutoSync();
+            }
+        }
+
+        function loadCategoriesFromStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_CATS);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length > 0) categories = parsed;
+                }
+            } catch (e) { /* keep defaults */ }
+        }
+
+        function loadCategories() {
+            loadCategoriesFromStorage();
+            renderCategorySelect();
+            renderCategoryFilters();
+            renderCategoryModalList();
+        }
+
+        function renderCategorySelect() {
+            const select = document.getElementById('qr-category');
+            const current = select.value;
+            select.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            if (categories.includes(current)) select.value = current;
+        }
+
+        function renderCategoryFilters() {
+            const container = document.getElementById('category-filters');
+            const all = ['ทั้งหมด', ...categories];
+            container.innerHTML = all.map(cat => {
+                const active = cat === currentFilterCategory;
+                const cls = active
+                    ? 'cat-filter-btn active px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-600 text-white whitespace-nowrap'
+                    : 'cat-filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-white text-ink-600 hover:bg-ink-100 border border-ink-200 whitespace-nowrap';
+                return `<button type="button" class="${cls}" onclick="setCategoryFilter('${escapeAttr(cat)}')">${escapeHtml(cat)}</button>`;
+            }).join('');
+        }
+
+        function renderCategoryModalList() {
+            const list = document.getElementById('category-list');
+            if (categories.length === 0) {
+                list.innerHTML = '<p class="text-xs text-ink-400 text-center py-3">ยังไม่มีหมวดหมู่</p>';
+                return;
+            }
+            list.innerHTML = categories.map(cat => `
+                <div class="flex items-center justify-between px-3 py-2 bg-ink-50 border border-ink-200 rounded-lg">
+                    <span class="text-xs text-ink-700">${escapeHtml(cat)}</span>
+                    <button type="button" onclick="deleteCategory('${escapeAttr(cat)}')" class="text-ink-400 hover:text-rose-500 p-1" title="ลบหมวดหมู่นี้">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        window.handleAddCategory = function(event) {
+            event.preventDefault();
+            const input = document.getElementById('new-cat-input');
+            const name = input.value.trim();
+            if (!name) return;
+            if (categories.includes(name)) {
+                showToast('มีหมวดหมู่นี้อยู่แล้ว', 'error');
+                return;
+            }
+            categories.push(name);
+            saveCategories();
+            renderCategorySelect();
+            renderCategoryFilters();
+            renderCategoryModalList();
+            input.value = '';
+            showToast(`เพิ่มหมวดหมู่ "${name}" แล้ว`, 'success');
+        };
+
+        window.deleteCategory = function(name) {
+            categories = categories.filter(c => c !== name);
+            if (categories.length === 0) categories = ['ทั่วไป'];
+            saveCategories();
+            if (currentFilterCategory === name) currentFilterCategory = 'ทั้งหมด';
+            renderCategorySelect();
+            renderCategoryFilters();
+            renderCategoryModalList();
+            filterVault();
+            showToast(`ลบหมวดหมู่ "${name}" แล้ว`, 'info');
+        };
+
+        window.openCategoryModal = function() {
+            renderCategoryModalList();
+            openModal('category-modal');
+        };
+
+        // ---------- URL Safety Analysis ----------
+        const SHORTENER_DOMAINS = ['bit.ly', 'tinyurl.com', 't.co', 'is.gd', 'goo.gl', 'ow.ly', 'buff.ly', 'cutt.ly', 'rebrand.ly', 'shorturl.at', 'rb.gy', 'tiny.cc', 'lnkd.in'];
+
+        function analyzeUrlSafety(rawUrl) {
+            const result = { level: 'danger', label: 'รูปแบบลิงก์ไม่ถูกต้อง', reasons: [], host: '' };
+            if (!rawUrl) {
+                result.reasons.push('ยังไม่ได้กรอกลิงก์');
+                return result;
+            }
+            let parsed;
+            try {
+                parsed = new URL(rawUrl);
+            } catch (e) {
+                result.reasons.push('ไม่สามารถแปลง URL นี้ได้ ตรวจสอบรูปแบบอีกครั้ง');
+                return result;
+            }
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                result.reasons.push(`รูปแบบลิงก์ "${parsed.protocol}" ไม่ปลอดภัยสำหรับ QR Code สาธารณะ`);
+                return result;
+            }
+            result.host = parsed.hostname;
+            result.level = 'safe';
+            result.label = 'ปลอดภัย';
+
+            if (parsed.protocol !== 'https:') {
+                result.level = 'caution';
+                result.reasons.push('ไม่ได้เข้ารหัสผ่าน HTTPS');
+            }
+            if (/^(\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname)) {
+                result.level = 'caution';
+                result.reasons.push('ใช้หมายเลข IP แทนชื่อโดเมน ซึ่งพบได้บ่อยในลิงก์หลอกลวง');
+            }
+            if (SHORTENER_DOMAINS.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
+                result.level = 'caution';
+                result.reasons.push('เป็นลิงก์ย่อ ผู้สแกนจะไม่เห็นปลายทางจริง ควรระบุปลายทางจริงในชื่อ QR Code');
+            }
+            if (parsed.username || parsed.password) {
+                result.level = 'danger';
+                result.reasons.push('มีข้อมูลบัญชีฝังอยู่ใน URL โดยตรง');
+            }
+            if (result.level === 'caution') result.label = 'ควรระวัง';
+            if (result.level === 'danger') result.label = 'อันตราย';
+            return result;
+        }
+
+        function safetyBadgeHtml(analysis, size) {
+            const map = {
+                safe: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: 'fa-shield-check' },
+                caution: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: 'fa-triangle-exclamation' },
+                danger: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: 'fa-ban' }
+            };
+            const s = map[analysis.level] || map.danger;
+            const sz = size === 'sm' ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1';
+            return `<span class="inline-flex items-center space-x-1 ${sz} rounded-full ${s.bg} ${s.text} border ${s.border} font-medium" title="${escapeAttr(analysis.reasons.join(' • ') || 'ไม่พบความเสี่ยงเบื้องต้น')}">
+                <i class="fa-solid ${s.icon}"></i><span>${escapeHtml(analysis.label)}</span>
+            </span>`;
+        }
+
+        function updateUrlSafetyReadout() {
+            const url = document.getElementById('qr-url').value.trim();
+            const readout = document.getElementById('url-safety-readout');
+            if (!url) {
+                readout.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>กรอกลิงก์เพื่อตรวจสอบความปลอดภัยเบื้องต้น</span>';
+                readout.className = 'mt-1.5 text-[11px] flex items-center space-x-1.5 text-ink-500';
+                return { level: 'danger', label: '', reasons: [], host: '' };
+            }
+            const analysis = analyzeUrlSafety(url);
+            const colorClass = analysis.level === 'safe' ? 'text-emerald-600' : (analysis.level === 'caution' ? 'text-amber-600' : 'text-rose-600');
+            const icon = analysis.level === 'safe' ? 'fa-circle-check' : (analysis.level === 'caution' ? 'fa-triangle-exclamation' : 'fa-circle-xmark');
+            const detail = analysis.reasons.length ? analysis.reasons.join(' • ') : `โดเมนปลายทาง: ${analysis.host}`;
+            readout.innerHTML = `<i class="fa-solid ${icon}"></i><span>${escapeHtml(analysis.label)} — ${escapeHtml(detail)}</span>`;
+            readout.className = `mt-1.5 text-[11px] flex items-center space-x-1.5 ${colorClass}`;
+            return analysis;
+        }
+
+        // ---------- QR Rendering ----------
+        function renderQRCanvas(canvas, url, fgColor, bgColor, iconType, customDataUrl) {
+            if (!canvas) return;
+            const size = 260;
+            new QRious({
+                element: canvas,
+                value: url || 'https://example.com',
+                size: size,
+                level: 'H',
+                foreground: fgColor || '#0f172a',
+                background: bgColor || '#ffffff'
+            });
+
+            if (iconType) {
+                const ctx = canvas.getContext('2d');
+                const boxSize = size * 0.22;
+                const x = (size - boxSize) / 2;
+                const y = (size - boxSize) / 2;
+
+                ctx.fillStyle = bgColor || '#ffffff';
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(x - 2, y - 2, boxSize + 4, boxSize + 4, 8);
+                else ctx.rect(x - 2, y - 2, boxSize + 4, boxSize + 4);
+                ctx.fill();
+
+                ctx.strokeStyle = fgColor || '#0f172a';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                if (iconType === 'custom' && customDataUrl) {
+                    const img = new Image();
+                    img.onload = function () {
+                        ctx.save();
+                        ctx.beginPath();
+                        if (ctx.roundRect) ctx.roundRect(x, y, boxSize, boxSize, 6);
+                        else ctx.rect(x, y, boxSize, boxSize);
+                        ctx.clip();
+                        ctx.drawImage(img, x, y, boxSize, boxSize);
+                        ctx.restore();
+                    };
+                    img.src = customDataUrl;
+                } else if (iconType !== 'custom') {
+                    ctx.fillStyle = fgColor || '#0f172a';
+                    ctx.font = 'bold 20px "Font Awesome 6 Free"';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    let unicode = '\uf0ac';
+                    if (iconType === 'link') unicode = '\uf0c1';
+                    if (iconType === 'share') unicode = '\uf1e0';
+                    if (iconType === 'star') unicode = '\uf005';
+                    ctx.fillText(unicode, size / 2, size / 2 + 1);
+                }
+            }
+        }
+
+        function updateLivePreview() {
+            const url = document.getElementById('qr-url').value;
+            const fg = document.getElementById('qr-fg-color').value;
+            const bg = document.getElementById('qr-bg-color').value;
+            const canvas = document.getElementById('qr-preview');
+
+            document.getElementById('fg-hex').textContent = fg;
+            document.getElementById('bg-hex').textContent = bg;
+
+            renderQRCanvas(canvas, url, fg, bg, currentCenterIcon, customIconDataUrl);
+            updateUrlSafetyReadout();
+        }
+
+        window.setPresetTheme = function (fg, bg) {
+            document.getElementById('qr-fg-color').value = fg;
+            document.getElementById('qr-bg-color').value = bg;
+            updateLivePreview();
+        };
+
+        window.selectCenterIcon = function (iconName) {
+            currentCenterIcon = iconName;
+            document.querySelectorAll('.icon-btn').forEach(btn => {
+                if (btn.getAttribute('data-icon') === iconName) {
+                    btn.classList.add('border-brand-500', 'active');
+                    btn.classList.remove('border-ink-200');
+                } else {
+                    btn.classList.remove('border-brand-500', 'active');
+                    btn.classList.add('border-ink-200');
+                }
+            });
+            updateLivePreview();
+        };
+
+        window.toggleCustomizer = function () {
+            const panel = document.getElementById('customizer-panel');
+            const chevron = document.getElementById('customizer-chevron');
+            panel.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        };
+
+        window.setCategoryFilter = function (cat) {
+            currentFilterCategory = cat;
+            renderCategoryFilters();
+            filterVault();
+        };
+
+        window.clearSearch = function () {
+            document.getElementById('search-input').value = '';
+            filterVault();
+        };
+
+        window.triggerCustomIconUpload = function () {
+            document.getElementById('custom-icon-file').click();
+        };
+
+        window.handleCustomIconUpload = function (event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showToast('กรุณาเลือกไฟล์ภาพ (PNG, JPG)', 'error');
+                return;
+            }
+            if (file.size > 2 * 1024 * 1024) {
+                showToast('ขนาดไฟล์ภาพต้องไม่เกิน 2MB', 'error');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                customIconDataUrl = e.target.result;
+                document.getElementById('custom-icon-img-preview').src = customIconDataUrl;
+                document.getElementById('custom-icon-filename').textContent = file.name;
+                document.getElementById('custom-icon-preview-box').classList.remove('hidden');
+                selectCenterIcon('custom');
+                showToast('อัปโหลดโลโก้สำเร็จแล้ว', 'success');
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.removeCustomIcon = function () {
+            customIconDataUrl = null;
+            document.getElementById('custom-icon-file').value = '';
+            document.getElementById('custom-icon-preview-box').classList.add('hidden');
+            selectCenterIcon('');
+            showToast('นำโลโก้ที่อัปโหลดออกแล้ว', 'info');
+        };
+
+        // ---------- Save / Edit / Delete ----------
+        window.handleSaveQR = function (event) {
+            event.preventDefault();
+            const titleInput = document.getElementById('qr-title');
+            const urlInput = document.getElementById('qr-url');
+            const categorySelect = document.getElementById('qr-category');
+            const fgColor = document.getElementById('qr-fg-color').value;
+            const bgColor = document.getElementById('qr-bg-color').value;
+            const editId = document.getElementById('qr-edit-id').value;
+
+            const title = titleInput.value.trim();
+            let url = urlInput.value.trim();
+            if (!title) {
+                showToast('กรุณากรอกชื่อ QR Code', 'error');
+                return;
+            }
+            if (!/^https?:\/\//i.test(url)) {
+                url = 'https://' + url;
+            }
+
+            const analysis = analyzeUrlSafety(url);
+            if (analysis.level === 'danger' && analysis.host === '') {
+                showToast('ลิงก์นี้ไม่ปลอดภัยสำหรับสร้าง QR Code สาธารณะ กรุณาตรวจสอบอีกครั้ง', 'error');
+                return;
+            }
+
+            if (editId) {
+                const idx = vaultItems.findIndex(i => i.id === editId);
+                if (idx !== -1) {
+                    vaultItems[idx] = {
+                        ...vaultItems[idx],
+                        title, url,
+                        category: categorySelect.value,
+                        fgColor, bgColor,
+                        icon: currentCenterIcon,
+                        customIcon: currentCenterIcon === 'custom' ? customIconDataUrl : null,
+                        updatedAt: new Date().toISOString()
+                    };
+                }
+                showToast(`บันทึกการแก้ไข "${title}" แล้ว`, 'success');
+                cancelEdit();
+            } else {
+                const newItem = {
+                    id: 'qr_' + Date.now(),
+                    title, url,
+                    category: categorySelect.value,
+                    fgColor, bgColor,
+                    icon: currentCenterIcon,
+                    customIcon: currentCenterIcon === 'custom' ? customIconDataUrl : null,
+                    createdAt: new Date().toISOString()
+                };
+                vaultItems.unshift(newItem);
+                showToast(`บันทึก "${title}" เรียบร้อยแล้ว`, 'success');
+                titleInput.value = '';
+            }
+
+            saveLocalState();
+            filterVault();
+        };
+
+        function startEdit(item) {
+            document.getElementById('qr-edit-id').value = item.id;
+            document.getElementById('qr-title').value = item.title;
+            document.getElementById('qr-url').value = item.url;
+            document.getElementById('qr-category').value = item.category;
+            document.getElementById('qr-fg-color').value = item.fgColor || '#0f172a';
+            document.getElementById('qr-bg-color').value = item.bgColor || '#ffffff';
+            selectCenterIcon(item.icon || '');
+            customIconDataUrl = item.customIcon || null;
+            if (item.icon === 'custom' && item.customIcon) {
+                document.getElementById('custom-icon-img-preview').src = item.customIcon;
+                document.getElementById('custom-icon-preview-box').classList.remove('hidden');
+            }
+            document.getElementById('form-heading').querySelector('span').textContent = 'แก้ไข QR Code';
+            document.getElementById('qr-submit-btn').querySelector('span').textContent = 'บันทึกการแก้ไข';
+            document.getElementById('qr-cancel-edit-btn').classList.remove('hidden');
+            updateLivePreview();
+            document.getElementById('qr-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        window.cancelEdit = function () {
+            document.getElementById('qr-edit-id').value = '';
+            document.getElementById('form-heading').querySelector('span').textContent = 'สร้าง QR Code ใหม่';
+            document.getElementById('qr-submit-btn').querySelector('span').textContent = 'ตั้งชื่อ & บันทึกเข้าคลัง';
+            document.getElementById('qr-cancel-edit-btn').classList.add('hidden');
+        };
+
+        window.editFromModal = function () {
+            if (!selectedItemForView) return;
+            closeModal('view-modal');
+            startEdit(selectedItemForView);
+        };
+
+        // ---------- Filtering / Rendering ----------
+        window.filterVault = function () {
+            const searchQuery = document.getElementById('search-input').value.toLowerCase().trim();
+            const sortBy = document.getElementById('sort-select').value;
+            const clearBtn = document.getElementById('clear-search');
+            clearBtn.classList.toggle('hidden', !searchQuery);
+
+            let filtered = vaultItems.filter(item => {
+                const matchCategory = (currentFilterCategory === 'ทั้งหมด') || (item.category === currentFilterCategory);
+                const matchQuery = !searchQuery || item.title.toLowerCase().includes(searchQuery) || item.url.toLowerCase().includes(searchQuery);
+                return matchCategory && matchQuery;
+            });
+
+            filtered.sort((a, b) => {
+                if (sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
+                if (sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
+                if (sortBy === 'name') return a.title.localeCompare(b.title, 'th');
+                return 0;
+            });
+
+            renderVaultGrid(filtered);
+        };
+
+        function renderVaultGrid(items) {
+            const grid = document.getElementById('vault-grid');
+            const emptyState = document.getElementById('empty-state');
+            const badge = document.getElementById('saved-count-badge');
+            badge.textContent = `${items.length} รายการ`;
+
+            if (items.length === 0) {
+                grid.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+            grid.innerHTML = '';
+
+            items.forEach(item => {
+                const analysis = analyzeUrlSafety(item.url);
+                const card = document.createElement('div');
+                card.className = `card-panel rounded-2xl p-4 flex flex-col justify-between hover:border-ink-300 transition shadow-sm group relative border-l-4 safe-edge-${analysis.level}`;
+                card.innerHTML = `
+                    <div class="flex items-start justify-between space-x-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center space-x-2 mb-1 flex-wrap gap-y-1">
+                                <span class="px-2 py-0.5 rounded-md text-[10px] font-medium bg-ink-100 text-brand-700 border border-ink-200">
+                                    ${escapeHtml(item.category || 'ทั่วไป')}
+                                </span>
+                                ${safetyBadgeHtml(analysis, 'sm')}
+                                <span class="text-[10px] text-ink-400">${formatDate(item.createdAt)}</span>
+                            </div>
+                            <h4 class="font-bold text-sm text-ink-900 truncate group-hover:text-brand-700 transition" title="${escapeAttr(item.title)}">
+                                ${escapeHtml(item.title)}
+                            </h4>
+                            <p class="text-xs text-ink-500 font-mono-url truncate mt-0.5" title="${escapeAttr(item.url)}">
+                                <i class="fa-solid fa-arrow-up-right-from-square text-[10px] mr-1 text-ink-400"></i>${escapeHtml(item.url)}
+                            </p>
+                        </div>
+                        <div class="w-16 h-16 p-1 bg-white rounded-xl shadow-sm border border-ink-100 shrink-0 flex items-center justify-center cursor-pointer" onclick="openViewModal('${item.id}')">
+                            <canvas id="mini-canvas-${item.id}" class="w-full h-full rounded"></canvas>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-ink-100 flex items-center justify-between text-xs">
+                        <div class="flex items-center space-x-1">
+                            <button onclick="openViewModal('${item.id}')" class="px-2.5 py-1.5 rounded-lg bg-ink-100 hover:bg-ink-200 text-ink-600 transition flex items-center space-x-1">
+                                <i class="fa-solid fa-expand text-[11px]"></i><span>ขยาย</span>
+                            </button>
+                            <button onclick="copyToClipboard('${escapeAttr(item.url)}', 'คัดลอกลิงก์แล้ว')" class="px-2.5 py-1.5 rounded-lg bg-ink-100 hover:bg-ink-200 text-ink-600 transition flex items-center space-x-1">
+                                <i class="fa-solid fa-copy text-[11px]"></i><span>ลิงก์</span>
+                            </button>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <button onclick='startEdit(${JSON.stringify(item).replace(/'/g, "&#39;")})' class="p-1.5 rounded-lg bg-ink-100 hover:bg-brand-600 text-ink-600 hover:text-white transition" title="แก้ไข">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="downloadCardPNG('${item.id}')" class="p-1.5 rounded-lg bg-ink-100 hover:bg-brand-600 text-ink-600 hover:text-white transition" title="ดาวน์โหลด PNG">
+                                <i class="fa-solid fa-download"></i>
+                            </button>
+                            <button onclick="promptDelete('${item.id}')" class="p-1.5 rounded-lg bg-ink-100 hover:bg-rose-600 text-ink-600 hover:text-white transition" title="ลบรายการ">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+                setTimeout(() => {
+                    const miniCanvas = document.getElementById(`mini-canvas-${item.id}`);
+                    if (miniCanvas) renderQRCanvas(miniCanvas, item.url, item.fgColor, item.bgColor, item.icon, item.customIcon);
+                }, 0);
+            });
+        }
+
+        window.openViewModal = function (id) {
+            const item = vaultItems.find(i => i.id === id);
+            if (!item) return;
+            selectedItemForView = item;
+            document.getElementById('modal-title').textContent = item.title;
+            document.getElementById('modal-url').textContent = item.url;
+            document.getElementById('modal-category').textContent = item.category || 'ทั่วไป';
+            document.getElementById('modal-safety-badge').innerHTML = safetyBadgeHtml(analyzeUrlSafety(item.url), 'md');
+
+            const modalCanvas = document.getElementById('modal-qr-canvas');
+            renderQRCanvas(modalCanvas, item.url, item.fgColor, item.bgColor, item.icon, item.customIcon);
+            openModal('view-modal');
+        };
+
+        window.downloadModalQR = function () {
+            if (!selectedItemForView) return;
+            const canvas = document.getElementById('modal-qr-canvas');
+            const link = document.createElement('a');
+            link.download = `QR_${selectedItemForView.title.replace(/\s+/g, '_')}.png`;
+            link.href = canvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('ดาวน์โหลดรูปภาพสำเร็จ', 'success');
+        };
+
+        window.copyModalLink = function () {
+            if (!selectedItemForView) return;
+            copyToClipboard(selectedItemForView.url, 'คัดลอก URL เรียบร้อย');
+        };
+
+        window.promptDelete = function (id) {
+            const item = vaultItems.find(i => i.id === id);
+            if (!item) return;
+            selectedItemForDelete = item;
+            document.getElementById('confirm-delete-name').textContent = `ลบ "${item.title}" ออกจากคลัง?`;
+            openModal('confirm-modal');
+        };
+
+        document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+            if (!selectedItemForDelete) return;
+            vaultItems = vaultItems.filter(i => i.id !== selectedItemForDelete.id);
+            saveLocalState();
+            filterVault();
+            showToast(`ลบ "${selectedItemForDelete.title}" แล้ว`, 'info');
+            closeModal('confirm-modal');
+            selectedItemForDelete = null;
+        });
+
+        // ---------- Print ----------
+        window.openPrintModal = function () {
+            if (vaultItems.length === 0) {
+                showToast('ไม่มี QR Code สำหรับการพิมพ์', 'error');
+                return;
+            }
+            const printArea = document.getElementById('print-area');
+            printArea.innerHTML = '';
+            vaultItems.forEach(item => {
+                const printCard = document.createElement('div');
+                printCard.className = 'border-2 border-ink-200 p-4 rounded-xl text-center space-y-2 flex flex-col items-center bg-white';
+                printCard.innerHTML = `
+                    <p class="font-bold text-sm text-ink-900">${escapeHtml(item.title)}</p>
+                    <canvas id="print-canvas-${item.id}" class="w-36 h-36 border border-ink-100 rounded-lg p-1 bg-white"></canvas>
+                    <p class="text-[10px] font-mono-url text-ink-600 break-all">${escapeHtml(item.url)}</p>
+                `;
+                printArea.appendChild(printCard);
+                setTimeout(() => {
+                    const canvas = document.getElementById(`print-canvas-${item.id}`);
+                    if (canvas) renderQRCanvas(canvas, item.url, item.fgColor, item.bgColor, item.icon, item.customIcon);
+                }, 0);
+            });
+            openModal('print-modal');
+        };
+
+        window.downloadPreviewPNG = function () {
+            const canvas = document.getElementById('qr-preview');
+            const title = document.getElementById('qr-title').value.trim() || 'QRCode';
+            const link = document.createElement('a');
+            link.download = `QR_${title.replace(/\s+/g, '_')}.png`;
+            link.href = canvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('ดาวน์โหลดรูปภาพ PNG สำเร็จ', 'success');
+        };
+
+        window.downloadCardPNG = function (id) {
+            const miniCanvas = document.getElementById(`mini-canvas-${id}`);
+            const item = vaultItems.find(i => i.id === id);
+            if (!miniCanvas || !item) return;
+            const link = document.createElement('a');
+            link.download = `QR_${item.title.replace(/\s+/g, '_')}.png`;
+            link.href = miniCanvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast(`ดาวน์โหลด ${item.title} แล้ว`, 'success');
+        };
+
+        // ---------- Modal Helpers ----------
+        window.openModal = function (id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            const anim = modal.querySelector('.modal-anim') || modal.firstElementChild;
+            if (anim) {
+                anim.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    anim.classList.remove('scale-95', 'opacity-0');
+                    anim.classList.add('scale-100', 'opacity-100');
+                }, 10);
+            }
+        };
+
+        window.closeModal = function (id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            const anim = modal.querySelector('.modal-anim') || modal.firstElementChild;
+            if (anim) {
+                anim.classList.remove('scale-100', 'opacity-100');
+                anim.classList.add('scale-95', 'opacity-0');
+            }
+            setTimeout(() => modal.classList.add('hidden'), 150);
+        };
+
+        window.copyToClipboard = function (text, successMsg) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast(successMsg || 'คัดลอกลงคลิปบอร์ดแล้ว', 'info'));
+                return;
+            }
+            const tempInput = document.createElement('textarea');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showToast(successMsg || 'คัดลอกลงคลิปบอร์ดแล้ว', 'info');
+        };
+
+        window.showToast = function (message, type) {
+            type = type || 'info';
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            let bgClass = 'bg-white text-ink-700 border-ink-200';
+            let icon = 'fa-circle-info text-brand-500';
+            if (type === 'success') { bgClass = 'bg-white text-emerald-700 border-emerald-200'; icon = 'fa-circle-check text-emerald-500'; }
+            else if (type === 'error') { bgClass = 'bg-white text-rose-700 border-rose-200'; icon = 'fa-circle-exclamation text-rose-500'; }
+
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl border ${bgClass} shadow-lg flex items-center space-x-3 text-xs transform transition-all duration-300 translate-y-2 opacity-0`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-base"></i><span class="font-medium">${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+        function escapeAttr(str) { return escapeHtml(str); }
+
+        function formatDate(isoString) {
+            if (!isoString) return '';
+            const d = new Date(isoString);
+            return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+        }
+
+        // ---------- JSON Export / Import (no setup needed) ----------
+        window.exportJsonFile = function () {
+            const payload = { vaultItems, categories, exportedAt: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `qr-vault-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showToast('ส่งออกไฟล์สำรองข้อมูลแล้ว', 'success');
+        };
+
+        window.importJsonFile = function (event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    applyRestoredData(data);
+                    showToast('นำเข้าข้อมูลสำเร็จ', 'success');
+                } catch (err) {
+                    console.error(err);
+                    showToast('ไม่สามารถอ่านไฟล์นี้ได้ ตรวจสอบว่าเป็นไฟล์สำรองที่ถูกต้อง', 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        };
+
+        function applyRestoredData(data) {
+            if (data && Array.isArray(data.vaultItems)) vaultItems = data.vaultItems;
+            if (data && Array.isArray(data.categories) && data.categories.length > 0) categories = data.categories;
+            saveLocalState();
+            saveCategories();
+            renderCategorySelect();
+            renderCategoryFilters();
+            renderCategoryModalList();
+            filterVault();
+        }
+
+        // ---------- Google Drive Backup (optional, uses the user's own OAuth Client ID) ----------
+        const driveState = {
+            clientId: localStorage.getItem('qrVault.driveClientId') || '',
+            tokenClient: null,
+            accessToken: null,
+            connected: false,
+            fileId: localStorage.getItem('qrVault.driveFileId') || null,
+            lastSync: localStorage.getItem('qrVault.driveLastSync') || null
+        };
+        const DRIVE_FILE_NAME = 'qr-vault-backup.json';
+        const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+        function initDriveUi() {
+            document.getElementById('drive-client-id').value = driveState.clientId;
+            updateDriveStatusUi();
+        }
+
+        function updateDriveStatusUi() {
+            const dot = document.getElementById('drive-status-dot');
+            const text = document.getElementById('drive-status-text');
+            const connectBtn = document.getElementById('drive-connect-btn');
+            const disconnectBtn = document.getElementById('drive-disconnect-btn');
+            const backupBtn = document.getElementById('drive-backup-btn');
+            const restoreBtn = document.getElementById('drive-restore-btn');
+            const headerDot = document.getElementById('sync-dot');
+            const headerText = document.getElementById('sync-text');
+            const lastSyncEl = document.getElementById('drive-last-sync');
+
+            if (driveState.connected) {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+                text.textContent = 'เชื่อมต่อ Google Drive แล้ว';
+                connectBtn.classList.add('hidden');
+                disconnectBtn.classList.remove('hidden');
+                backupBtn.disabled = false;
+                restoreBtn.disabled = false;
+                backupBtn.className = backupBtn.className.replace('bg-ink-100 text-ink-400', 'bg-brand-600 text-white hover:bg-brand-500').replace('border-ink-200', 'border-transparent');
+                restoreBtn.className = restoreBtn.className.replace('bg-ink-100 text-ink-400', 'bg-white text-ink-700 hover:bg-ink-100').replace('border-ink-200', 'border-ink-300');
+                headerDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+                headerText.textContent = 'ซิงก์กับ Google Drive แล้ว';
+            } else {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-ink-400';
+                text.textContent = 'ยังไม่ได้เชื่อมต่อ';
+                connectBtn.classList.remove('hidden');
+                disconnectBtn.classList.add('hidden');
+                backupBtn.disabled = true;
+                restoreBtn.disabled = true;
+                headerDot.className = 'w-2 h-2 rounded-full bg-ink-400';
+                headerText.textContent = 'ยังไม่ได้เชื่อมต่อ Google Drive';
+            }
+            lastSyncEl.textContent = driveState.lastSync ? `ซิงก์ล่าสุด: ${new Date(driveState.lastSync).toLocaleString('th-TH')}` : '';
+        }
+
+        window.saveDriveClientId = function () {
+            const val = document.getElementById('drive-client-id').value.trim();
+            if (!val) { showToast('กรุณากรอก Client ID', 'error'); return; }
+            driveState.clientId = val;
+            localStorage.setItem('qrVault.driveClientId', val);
+            showToast('บันทึก Client ID แล้ว กด "เชื่อมต่อ" เพื่อเข้าสู่ระบบ Google', 'success');
+        };
+
+        function ensureTokenClient() {
+            if (!driveState.clientId) {
+                showToast('กรุณากรอกและบันทึก Google OAuth Client ID ก่อน', 'error');
+                return null;
+            }
+            if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+                showToast('โหลดไลบรารี Google ไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'error');
+                return null;
+            }
+            if (!driveState.tokenClient) {
+                driveState.tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: driveState.clientId,
+                    scope: DRIVE_SCOPE,
+                    callback: async (resp) => {
+                        if (resp.error) {
+                            showToast('การเชื่อมต่อ Google ล้มเหลว: ' + resp.error, 'error');
+                            return;
+                        }
+                        driveState.accessToken = resp.access_token;
+                        driveState.connected = true;
+                        updateDriveStatusUi();
+                        showToast('เชื่อมต่อ Google Drive สำเร็จ', 'success');
+                        await driveFindExistingFile();
+                    }
+                });
+            }
+            return driveState.tokenClient;
+        }
+
+        window.connectDrive = function () {
+            const client = ensureTokenClient();
+            if (!client) return;
+            client.requestAccessToken({ prompt: '' });
+        };
+
+        window.disconnectDrive = function () {
+            if (driveState.accessToken && typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+                google.accounts.oauth2.revoke(driveState.accessToken, () => {});
+            }
+            driveState.accessToken = null;
+            driveState.connected = false;
+            updateDriveStatusUi();
+            showToast('ยกเลิกการเชื่อมต่อ Google Drive แล้ว', 'info');
+        };
+
+        async function driveApiFetch(url, options) {
+            options = options || {};
+            options.headers = Object.assign({}, options.headers, { Authorization: 'Bearer ' + driveState.accessToken });
+            const res = await fetch(url, options);
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                throw new Error(`Drive API error ${res.status}: ${errText}`);
+            }
+            return res;
+        }
+
+        async function driveFindExistingFile() {
+            try {
+                const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
+                const res = await driveApiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)`);
+                const data = await res.json();
+                if (data.files && data.files.length > 0) {
+                    driveState.fileId = data.files[0].id;
+                    localStorage.setItem('qrVault.driveFileId', driveState.fileId);
+                }
+            } catch (e) {
+                console.error('Drive find error:', e);
+            }
+        }
+
+        async function driveUploadBackup(silent) {
+            const payload = { vaultItems, categories, exportedAt: new Date().toISOString() };
+            const content = JSON.stringify(payload, null, 2);
+            const metadata = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
+            const boundary = 'qrvault_boundary_' + Date.now();
+            const body =
+                `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+                `--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+
+            const isUpdate = !!driveState.fileId;
+            const url = isUpdate
+                ? `https://www.googleapis.com/upload/drive/v3/files/${driveState.fileId}?uploadType=multipart`
+                : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+            const res = await driveApiFetch(url, {
+                method: isUpdate ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+                body
+            });
+            const data = await res.json();
+            if (data.id) {
+                driveState.fileId = data.id;
+                localStorage.setItem('qrVault.driveFileId', data.id);
+            }
+            driveState.lastSync = new Date().toISOString();
+            localStorage.setItem('qrVault.driveLastSync', driveState.lastSync);
+            updateDriveStatusUi();
+            if (!silent) showToast('สำรองข้อมูลขึ้น Google Drive สำเร็จ', 'success');
+        }
+
+        window.driveBackupNow = async function () {
+            if (!driveState.connected) return;
+            try {
+                await driveUploadBackup(false);
+            } catch (e) {
+                console.error(e);
+                showToast('สำรองข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง', 'error');
+            }
+        };
+
+        async function driveAutoSync() {
+            try {
+                await driveUploadBackup(true);
+            } catch (e) {
+                console.error('Auto sync failed:', e);
+            }
+        }
+
+        window.driveRestoreNow = async function () {
+            if (!driveState.connected) return;
+            try {
+                if (!driveState.fileId) await driveFindExistingFile();
+                if (!driveState.fileId) {
+                    showToast('ยังไม่พบไฟล์สำรองข้อมูลใน Drive', 'error');
+                    return;
+                }
+                const res = await driveApiFetch(`https://www.googleapis.com/drive/v3/files/${driveState.fileId}?alt=media`);
+                const data = await res.json();
+                applyRestoredData(data);
+                showToast('กู้คืนข้อมูลจาก Google Drive สำเร็จ', 'success');
+            } catch (e) {
+                console.error(e);
+                showToast('กู้คืนข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง', 'error');
+            }
+        };
+
+        // ---------- Initialize ----------
+        window.onload = function () {
+            loadLocalState();
+            loadCategories();
+            updateLivePreview();
+            filterVault();
+            initDriveUi();
+        };
+    </script>
+</body>
+</html>
